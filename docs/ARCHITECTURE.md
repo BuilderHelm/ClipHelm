@@ -12,7 +12,7 @@ Dependencies point downward. `ClipHelmCore`, `ClipHelmSecurity`, `ClipHelmOpenRo
 | Security | `OpenRouterSecretVault` backed by Keychain, redaction policy | Security framework, Foundation |
 | OpenRouter | One inference gateway, model discovery/capability selection, bounded request/response decoding | Core, Security |
 | Sources | `SourceIngestor`, local file access, permitted remote acquisition | Core, Media |
-| Projects | Project manifest, migrations, atomic saves, regeneratable cache references | Core |
+| Projects | Implemented `ClipHelmProjects` (V2-0): format versions, `SchemaMigrator`, `DerivedArtifactStore`. The manifest record and store still live in the app target until V2-1 | Core |
 | Media | Metadata, source playback, thumbnails, frame sampling, audio extraction, editing proxies | Core |
 | Transcription | Chunked speech-to-word timeline, backend selection and normalization | Core, Media, OpenRouter |
 | Analysis | Local scene, subject, audio activity and pause evidence | Core, Media |
@@ -58,6 +58,8 @@ Phase 11 adds seven typed `ShotLayout` choices and source-time `LayoutCue` entri
 Phase 12 adds provider-free `ClipHelmPacing`. `DeadAirDetector`, `LongPauseTrimmer`, and `FillerWordDetector` produce typed source-time `ProposedRemoval` values. `PacingPlanner` checks transcript words, audio activity, sentence punctuation, speaker changes, scene changes, and screen/demo evidence before accepting them. Natural, Balanced, Tight, and Fast retain different contextual pause lengths; there is no single silence threshold that decides every cut. Filler cuts require isolated, short, confidently recognized hesitation words. Keep Demos protects locally classified or signaled screen activity and validated screen hints. `ClipPlanner` converts accepted removals to retained `ClipHelmEditSpec` segments, so captions and the edited timeline follow the same cuts. Audible joins still require review on real media.
 
 Phase 13 adds provider-free `ClipHelmCaptions`. `CaptionTrackBuilder` filters retained transcript words for the edit spec and source preview. `CaptionProgram` groups words at punctuation, pauses, cut boundaries, speech-speed changes, and line-length limits; its source-time frames carry safe-zone geometry, active-word emphasis, fade, subtle scale, and optional blur-in. `CaptionStyle` selects one of eight bounded font/color/background presets. `CaptionRenderer` draws a transparent CoreGraphics/CoreText image and applies blur with CoreImage. Workspace preview and final rendering use the same caption layout method. Empty transcripts produce no track or overlay.
+
+V2 layers (MomentGraph, project intelligence, direction, brand kits, variants, search) are described in [V2_ARCHITECTURE.md](V2_ARCHITECTURE.md). Their value types live in `ClipHelmCore/V2`.
 
 ## Data flow
 
