@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import ClipHelmCore
+import ClipHelmProjects
 import ClipHelmEditing
 import ClipHelmProcessing
 import ClipHelmSources
@@ -181,7 +182,7 @@ struct ProjectClipRecord: Codable, Identifiable, Sendable {
 }
 
 struct ProjectRecord: Codable, Identifiable {
-    static let currentVersion = 4
+    static let currentVersion = ProjectSchema.currentVersion
 
     let schemaVersion: Int
     let id: ProjectID
@@ -195,6 +196,11 @@ struct ProjectRecord: Codable, Identifiable {
     var clips: [ProjectClipRecord]
     var transcriptionModelID: String?
     var momentModelID: String?
+    /// V2 choices (brand kit, platforms, variants). Empty for projects from V1.
+    var v2: ProjectV2Metadata
+    /// The format this record was read from; not persisted. Below `currentVersion` means the
+    /// file on disk is older and gets a one-time backup before it is first rewritten.
+    var loadedSchemaVersion: Int
 
     var outputFormat: OutputFormat { configuration.outputFormat }
     var framingMode: FramingMode { configuration.framingMode }
@@ -220,13 +226,15 @@ struct ProjectRecord: Codable, Identifiable {
         clips = []
         transcriptionModelID = draft.transcriptionModelID
         momentModelID = draft.momentModelID
+        v2 = .empty
+        loadedSchemaVersion = Self.currentVersion
     }
 
     private enum CodingKeys: String, CodingKey {
         case schemaVersion, id, title, createdAt, sourceKind, sourceLabel
         case configuration, mediaAsset, transcript, clips
         case outputFormat, framingMode, selectedLengths, captionStyle
-        case transcriptionModelID, momentModelID
+        case transcriptionModelID, momentModelID, v2
     }
 
     init(from decoder: Decoder) throws {
@@ -236,6 +244,7 @@ struct ProjectRecord: Codable, Identifiable {
             throw ModelError.invalid("ProjectRecord version")
         }
         schemaVersion = Self.currentVersion
+        loadedSchemaVersion = version
         id = try c.decode(ProjectID.self, forKey: .id)
         title = try c.decode(String.self, forKey: .title)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
@@ -246,6 +255,7 @@ struct ProjectRecord: Codable, Identifiable {
         clips = try c.decodeIfPresent([ProjectClipRecord].self, forKey: .clips) ?? []
         transcriptionModelID = try c.decodeIfPresent(String.self, forKey: .transcriptionModelID)
         momentModelID = try c.decodeIfPresent(String.self, forKey: .momentModelID)
+        v2 = try c.decodeIfPresent(ProjectV2Metadata.self, forKey: .v2) ?? .empty
         if version == 1 {
             configuration = try ClipConfiguration(
                 outputFormat: c.decode(OutputFormat.self, forKey: .outputFormat),
@@ -275,6 +285,7 @@ struct ProjectRecord: Codable, Identifiable {
         try c.encode(clips, forKey: .clips)
         try c.encodeIfPresent(transcriptionModelID, forKey: .transcriptionModelID)
         try c.encodeIfPresent(momentModelID, forKey: .momentModelID)
+        try c.encode(v2, forKey: .v2)
     }
 }
 
@@ -307,6 +318,7 @@ final class ProjectStore: ObservableObject {
                 at: rootURL, includingPropertiesForKeys: nil
             ).filter { $0.pathExtension == "cliphelm" }
             var loaded: [ProjectRecord] = []
+            var newerProjects = 0
             for package in packages {
                 do {
                     let manifest = package.appending(path: "project.json")
@@ -314,7 +326,7 @@ final class ProjectStore: ObservableObject {
                     guard (1...25_000_000).contains(size) else {
                         throw ModelError.invalid("Project manifest size")
                     }
-                    let data = try Data(contentsOf: manifest)
+                    let data = try ProjectSchema.migrator.migrate(Data(contentsOf: manifest)).data
                     let record = try JSONDecoder().decode(ProjectRecord.self, from: data)
                     guard record.schemaVersion == ProjectRecord.currentVersion,
                           package.deletingPathExtension().lastPathComponent == record.id.rawValue.uuidString,
@@ -331,7 +343,8 @@ final class ProjectStore: ObservableObject {
                           record.clips.allSatisfy({ clip in
                               guard let asset = record.mediaAsset else { return false }
                               return (try? clip.validate(for: asset)) != nil
-                          }) else {
+                          }),
+                          (try? record.v2.validate(clipIDs: Set(record.clips.map(\.id)))) != nil else {
                         throw ModelError.invalid("ProjectRecord")
                     }
                     loaded.append(record)
@@ -340,11 +353,16 @@ final class ProjectStore: ObservableObject {
                     } catch {
                         loadError = "Some interrupted render files could not be removed. The project was kept."
                     }
+                } catch SchemaMigrationError.futureVersion {
+                    newerProjects += 1
                 } catch {
                     loadError = "Some projects could not be opened. Their files were left untouched."
                 }
             }
             projects = loaded.sorted { $0.createdAt > $1.createdAt }
+            if newerProjects > 0 {
+                loadError = "\(newerProjects) \(newerProjects == 1 ? "project was" : "projects were") saved by a newer version of ClipHelm and left untouched. Update ClipHelm to open \(newerProjects == 1 ? "it" : "them")."
+            }
         } catch {
             loadError = "Projects could not be loaded. Their files were left untouched."
         }
@@ -398,10 +416,7 @@ final class ProjectStore: ObservableObject {
         try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true,
                                                 attributes: [.posixPermissions: 0o700])
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: package.path)
-        let data = try JSONEncoder().encode(record)
-        try data.write(to: package.appending(path: "project.json"), options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600],
-                                              ofItemAtPath: package.appending(path: "project.json").path)
+        try writeManifest(record, to: rootURL)
         projects.insert(record, at: 0)
         return record
     }
@@ -417,15 +432,7 @@ final class ProjectStore: ObservableObject {
         }
         var updated = projects[index]
         updated.mediaAsset = asset
-        try write(updated, to: rootURL)
-        projects[index] = updated
-    }
-
-    private func write(_ record: ProjectRecord, to rootURL: URL) throws {
-        let data = try JSONEncoder().encode(record)
-        let manifest = rootURL.appending(path: "\(record.id.rawValue.uuidString).cliphelm/project.json")
-        try data.write(to: manifest, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: manifest.path)
+        try persist(updated, at: index, rootURL: rootURL)
     }
 
     func saveTranscript(_ transcript: Transcript, for projectID: ProjectID) throws {
@@ -439,12 +446,7 @@ final class ProjectStore: ObservableObject {
         if !transcript.hasMeaningfulSpeech {
             updated.configuration = try updated.configuration.disablingCaptions()
         }
-        let data = try JSONEncoder().encode(updated)
-        guard data.count <= 25_000_000 else { throw ModelError.invalid("Transcript too large") }
-        let manifest = rootURL.appending(path: "\(projectID.rawValue.uuidString).cliphelm/project.json")
-        try data.write(to: manifest, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: manifest.path)
-        projects[index] = updated
+        try persist(updated, at: index, rootURL: rootURL)
     }
 
     func analysisCacheDirectory(for projectID: ProjectID) throws -> URL {
@@ -493,12 +495,7 @@ final class ProjectStore: ObservableObject {
               Set(updated.clips.flatMap { [$0.previewFileName, $0.finalFileName] }).count == updated.clips.count * 2 else {
             throw ModelError.invalid("Duplicate or excessive clips")
         }
-        let data = try JSONEncoder().encode(updated)
-        guard data.count <= 25_000_000 else { throw ModelError.invalid("Project too large") }
-        let manifest = rootURL.appending(path: "\(projectID.rawValue.uuidString).cliphelm/project.json")
-        try data.write(to: manifest, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: manifest.path)
-        projects[index] = updated
+        try persist(updated, at: index, rootURL: rootURL)
     }
 
     func updateClip(_ clip: ProjectClipRecord, for projectID: ProjectID) throws {
@@ -545,11 +542,28 @@ final class ProjectStore: ObservableObject {
     }
 
     private func persist(_ record: ProjectRecord, at index: Int, rootURL: URL) throws {
+        var written = record
+        try writeManifest(record, to: rootURL)
+        written.loadedSchemaVersion = ProjectRecord.currentVersion
+        projects[index] = written
+    }
+
+    /// The only place a manifest is written. Before the first write that would replace an
+    /// older-format file, that file is kept once as `project.v<N>.json`.
+    private func writeManifest(_ record: ProjectRecord, to rootURL: URL) throws {
         let data = try JSONEncoder().encode(record)
         guard data.count <= 25_000_000 else { throw ModelError.invalid("Project too large") }
-        let manifest = rootURL.appending(path: "\(record.id.rawValue.uuidString).cliphelm/project.json")
+        let package = rootURL.appending(path: "\(record.id.rawValue.uuidString).cliphelm", directoryHint: .isDirectory)
+        let manifest = package.appending(path: "project.json")
+        if record.loadedSchemaVersion < ProjectRecord.currentVersion {
+            let backup = package.appending(path: ProjectSchema.backupFileName(forVersion: record.loadedSchemaVersion))
+            if !FileManager.default.fileExists(atPath: backup.path),
+               FileManager.default.fileExists(atPath: manifest.path) {
+                try FileManager.default.copyItem(at: manifest, to: backup)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: backup.path)
+            }
+        }
         try data.write(to: manifest, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: manifest.path)
-        projects[index] = record
     }
 }
