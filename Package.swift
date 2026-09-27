@@ -22,11 +22,13 @@ let package = Package(
         .library(name: "ClipHelmCaptions", targets: ["ClipHelmCaptions"]),
         .library(name: "ClipHelmRendering", targets: ["ClipHelmRendering"]),
         .library(name: "ClipHelmProcessing", targets: ["ClipHelmProcessing"]),
+        .library(name: "ClipHelmProjects", targets: ["ClipHelmProjects"]),
         .executable(name: "ClipHelmApp", targets: ["ClipHelmApp"]),
     ],
     targets: [
         .target(name: "ClipHelmCore"),
         .target(name: "ClipHelmSecurity"),
+        .target(name: "ClipHelmProjects", dependencies: ["ClipHelmCore"]),
         .target(name: "ClipHelmOpenRouter", dependencies: ["ClipHelmSecurity"]),
         .target(name: "ClipHelmMedia", dependencies: ["ClipHelmCore"]),
         .target(name: "ClipHelmTranscription", dependencies: ["ClipHelmCore", "ClipHelmMedia", "ClipHelmOpenRouter"]),
@@ -42,9 +44,10 @@ let package = Package(
         .target(name: "ClipHelmSources", dependencies: ["ClipHelmCore", "ClipHelmMedia"]),
         .target(name: "ClipHelmRendering", dependencies: ["ClipHelmCore", "ClipHelmEditing", "ClipHelmCaptions", "ClipHelmMedia"]),
         .target(name: "ClipHelmProcessing", dependencies: ["ClipHelmCore", "ClipHelmSources", "ClipHelmTranscription", "ClipHelmAnalysis", "ClipHelmMoments", "ClipHelmFramingVision", "ClipHelmLayoutVision", "ClipHelmLayouts", "ClipHelmEditing", "ClipHelmRendering", "ClipHelmOpenRouter"]),
-        .executableTarget(name: "ClipHelmApp", dependencies: ["ClipHelmCore", "ClipHelmSecurity", "ClipHelmOpenRouter", "ClipHelmSources", "ClipHelmMedia", "ClipHelmTranscription", "ClipHelmAnalysis", "ClipHelmMoments", "ClipHelmCaptions", "ClipHelmEditing", "ClipHelmRendering", "ClipHelmProcessing"]),
+        .executableTarget(name: "ClipHelmApp", dependencies: ["ClipHelmCore", "ClipHelmProjects", "ClipHelmSecurity", "ClipHelmOpenRouter", "ClipHelmSources", "ClipHelmMedia", "ClipHelmTranscription", "ClipHelmAnalysis", "ClipHelmMoments", "ClipHelmCaptions", "ClipHelmEditing", "ClipHelmRendering", "ClipHelmProcessing"]),
         .testTarget(name: "ClipHelmCoreTests", dependencies: ["ClipHelmCore"]),
         .testTarget(name: "ClipHelmSecurityTests", dependencies: ["ClipHelmSecurity"]),
+        .testTarget(name: "ClipHelmProjectsTests", dependencies: ["ClipHelmProjects", "ClipHelmCore"]),
         .testTarget(name: "ClipHelmOpenRouterTests", dependencies: ["ClipHelmOpenRouter", "ClipHelmSecurity"]),
         .testTarget(name: "ClipHelmSourcesTests", dependencies: ["ClipHelmSources", "ClipHelmCore"],
                     resources: [.process("Fixtures")]),
@@ -62,6 +65,6 @@ let package = Package(
         .testTarget(name: "ClipHelmCaptionsTests", dependencies: ["ClipHelmCaptions", "ClipHelmEditing", "ClipHelmCore"]),
         .testTarget(name: "ClipHelmRenderingTests", dependencies: ["ClipHelmRendering", "ClipHelmCore", "ClipHelmMedia"], resources: [.process("Fixtures")]),
         .testTarget(name: "ClipHelmProcessingTests", dependencies: ["ClipHelmProcessing", "ClipHelmCore", "ClipHelmOpenRouter", "ClipHelmSecurity", "ClipHelmSources", "ClipHelmTranscription", "ClipHelmAnalysis", "ClipHelmMoments", "ClipHelmRendering", "ClipHelmMedia"], resources: [.process("Fixtures")]),
-        .testTarget(name: "ClipHelmAppTests", dependencies: ["ClipHelmApp", "ClipHelmCore", "ClipHelmSources", "ClipHelmAnalysis", "ClipHelmProcessing"], resources: [.process("Fixtures")]),
+        .testTarget(name: "ClipHelmAppTests", dependencies: ["ClipHelmApp", "ClipHelmCore", "ClipHelmProjects", "ClipHelmSources", "ClipHelmAnalysis", "ClipHelmProcessing"], resources: [.process("Fixtures")]),
     ]
 )
