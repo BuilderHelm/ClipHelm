@@ -127,7 +127,7 @@ struct CaptionStyleCard: View {
             }
             .contentShape(RoundedRectangle(cornerRadius: DS.Radius.medium, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressableCard)
         .accessibilityLabel("\(style.label) caption style")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }

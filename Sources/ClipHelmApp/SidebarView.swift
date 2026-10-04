@@ -6,9 +6,10 @@ enum SidebarSelection: Hashable {
     case project(UUID)
 }
 
-/// Brand header and primary action on top, library and projects in the middle,
+/// Brand header and New Clip Project on top, library and projects in the middle,
 /// Settings pinned to the bottom. Creating a project is an action, not a place,
-/// so it is a button rather than a row.
+/// so it is a button rather than a row. It stays bordered rather than prominent so
+/// each screen's own primary action is the only filled button in the window.
 struct SidebarView: View {
     @ObservedObject var navigation: NavigationState
     let projects: [ProjectRecord]
@@ -22,7 +23,7 @@ struct SidebarView: View {
                 switch navigation.route {
                 case .home, .recent: .route(navigation.route)
                 case .workspace: navigation.selectedProjectID.map(SidebarSelection.project)
-                case .newProject, .settings: nil
+                case .newProject: nil
                 }
             },
             set: { newValue in
@@ -83,18 +84,9 @@ struct SidebarView: View {
                 Label("New Clip Project", systemImage: "plus")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .controlSize(.large)
             .help("New Clip Project (⌘N)")
-            .overlay {
-                // Shows that setup is in progress while the wizard is open.
-                if navigation.route == .newProject {
-                    RoundedRectangle(cornerRadius: DS.Radius.small, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.25), lineWidth: 2)
-                        .padding(-3)
-                        .allowsHitTesting(false)
-                }
-            }
         }
         .padding(.horizontal, DS.Space.md)
         .padding(.top, DS.Space.xs)
@@ -104,9 +96,7 @@ struct SidebarView: View {
     private var footer: some View {
         VStack(spacing: 0) {
             Divider()
-            Button {
-                navigation.route = .settings
-            } label: {
+            SettingsLink {
                 HStack(spacing: DS.Space.xs) {
                     Image(systemName: "gearshape")
                         .frame(width: 20)
@@ -119,12 +109,11 @@ struct SidebarView: View {
                 }
                 .padding(.horizontal, DS.Space.xs)
                 .padding(.vertical, 6)
-                .background(navigation.route == .settings ? Color.primary.opacity(0.1) : .clear,
-                            in: RoundedRectangle(cornerRadius: DS.Radius.small, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.small, style: .continuous))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityAddTraits(navigation.route == .settings ? [.isSelected] : [])
+            .buttonStyle(.pressableRow)
+            .help("Open Settings (⌘,)")
             .padding(.horizontal, DS.Space.xs)
             .padding(.vertical, DS.Space.xs)
         }
@@ -146,14 +135,10 @@ struct SidebarView: View {
                     .lineLimit(1)
             }
         } icon: {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(DS.brandGradient)
-                .frame(width: 22, height: 22)
-                .overlay {
-                    Image(systemName: vertical ? "rectangle.portrait" : "rectangle")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
-                }
+            // Shape tells the canvas; a filled shape means clips exist, an outline a draft.
+            Image(systemName: (vertical ? "rectangle.portrait" : "rectangle")
+                  + (project.clips.isEmpty ? "" : ".fill"))
+                .foregroundStyle(project.clips.isEmpty ? Color.secondary : DS.accent)
                 .accessibilityHidden(true)
         }
         .help("\(project.title) — \(project.sourceLabel)")

@@ -46,37 +46,27 @@ struct ClipResultsView: View {
                 Spacer()
                 if !project.clips.isEmpty {
                     if selected.isEmpty {
-                        Button {
-                            chooseExportFolder(for: project.clips.filter { clip in
-                                guard let exportsDirectory else { return false }
-                                return FileManager.default.fileExists(atPath:
-                                    exportsDirectory.appending(path: clip.finalFileName).path)
-                            })
-                        } label: {
-                            Label("Download All", systemImage: "arrow.down.circle")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(exporting || exportsDirectory == nil)
-                        Button("Select All") {
-                            selected = Set(project.clips.filter { clip in
-                                guard let exportsDirectory else { return false }
-                                return FileManager.default.fileExists(atPath:
-                                    exportsDirectory.appending(path: clip.finalFileName).path)
-                            }.map(\.id))
-                        }
-                        .disabled(exporting)
+                        Button("Select All") { selected = Set(downloadableClips.map(\.id)) }
+                            .disabled(exporting)
                     } else {
-                        Text("\(selected.count) selected").foregroundStyle(.secondary)
+                        Text("\(selected.count) selected")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
                         Button("Deselect All") { selected.removeAll() }
                             .disabled(exporting)
                     }
+                    // One download action that follows the selection, rather than two
+                    // filled buttons where one is always disabled.
                     Button {
-                        chooseExportFolder(for: project.clips.filter { selected.contains($0.id) })
+                        chooseExportFolder(for: selected.isEmpty
+                            ? downloadableClips
+                            : project.clips.filter { selected.contains($0.id) })
                     } label: {
-                        Label("Download Selected (\(selected.count))", systemImage: "arrow.down.circle")
+                        Label(selected.isEmpty ? "Download All" : "Download \(selected.count) Selected",
+                              systemImage: "arrow.down.circle")
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(selected.isEmpty || exporting || exportsDirectory == nil)
+                    .disabled(exporting || exportsDirectory == nil || downloadableClips.isEmpty)
                 }
             }
             if project.clips.isEmpty {
@@ -136,6 +126,14 @@ struct ClipResultsView: View {
         .onDisappear { exportJob?.cancel() }
     }
 
+    /// Clips whose final file exists, so they can be exported.
+    private var downloadableClips: [ProjectClipRecord] {
+        guard let exportsDirectory else { return [] }
+        return project.clips.filter {
+            FileManager.default.fileExists(atPath: exportsDirectory.appending(path: $0.finalFileName).path)
+        }
+    }
+
     /// Most promising clips first.
     private var rankedClips: [ProjectClipRecord] {
         project.clips.sorted { ($0.viralPotential ?? 0) > ($1.viralPotential ?? 0) }
@@ -151,106 +149,15 @@ struct ClipResultsView: View {
     }
 
     private func resultCard(_ clip: ProjectClipRecord, directory: URL) -> some View {
-        let preview = directory.appending(path: clip.previewFileName)
-        let final = directory.appending(path: clip.finalFileName)
-        let hasPreview = FileManager.default.fileExists(atPath: preview.path)
-        let hasFinal = FileManager.default.fileExists(atPath: final.path)
-        let isSelected = selected.contains(clip.id)
-        let vertical = clip.spec.outputFormat.height > clip.spec.outputFormat.width
-        return VStack(alignment: .leading, spacing: DS.Space.xs) {
-            Button { reviewing = ReviewSelection(clipID: clip.id, autoplay: true) } label: {
-                ResultThumbnail(url: preview, aspectRatio: vertical ? 9 / 16 : 16 / 9)
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.medium, style: .continuous))
-                    .overlay(alignment: .bottomTrailing) {
-                        Text(ClipTimeLabel.duration(clip.spec))
-                            .font(.caption.weight(.semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.black.opacity(0.65), in: Capsule())
-                            .padding(DS.Space.xs)
-                    }
-                    .overlay(alignment: .topTrailing) {
-                        if let viral = clip.viralPotential {
-                            ViralBadge(value: viral).padding(DS.Space.xs)
-                        }
-                    }
-                    .overlay {
-                        Image(systemName: "play.circle.fill")
-                            .font(.system(size: 40))
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, .black.opacity(0.45))
-                            .opacity(hasPreview ? 0.9 : 0)
-                    }
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!hasPreview)
-            .help("Play \(clip.title)")
-            .accessibilityLabel("Play \(clip.title)")
-            .overlay(alignment: .topLeading) {
-                Toggle("Select \(clip.title)", isOn: Binding(
-                    get: { isSelected },
-                    set: { if $0 { selected.insert(clip.id) } else { selected.remove(clip.id) } }
-                ))
-                .toggleStyle(.checkbox)
-                .labelsHidden()
-                .padding(6)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DS.Radius.small))
-                .padding(DS.Space.xs)
-                .disabled(exporting || !hasFinal)
-            }
-
-            // Two reserved lines keep cards in a row the same height.
-            Text(clip.title).font(.headline)
-                .lineLimit(2, reservesSpace: true)
-                .help(clip.title)
-            Text("Source \(ClipTimeLabel.source(clip.spec)) · \(ClipTimeLabel.aspect(clip.spec.outputFormat))")
-                .font(.callout).foregroundStyle(.secondary)
-                .lineLimit(1)
-            if !clip.proposal.rationale.isEmpty {
-                Text(clip.proposal.rationale)
-                    .font(.caption).foregroundStyle(.secondary)
-                    .lineLimit(3, reservesSpace: true)
-                    .help(clip.proposal.rationale)
-            }
-            if !hasPreview || !hasFinal {
-                StatusMessage(text: "A generated file is missing. Reprocess the source or remove this clip from the project.",
-                              tone: .warning)
-            }
-            HStack(spacing: DS.Space.xs) {
-                Button("Edit") { reviewing = ReviewSelection(clipID: clip.id, autoplay: false) }
-                    .disabled(!hasPreview)
-                Button { chooseExportFolder(for: [clip]) } label: {
-                    Label("Download", systemImage: "arrow.down.circle")
-                }
-                .disabled(exporting || !hasFinal)
-                .help("Save this clip, with its captions, to a folder")
-                Spacer(minLength: 0)
-                Menu {
-                    Button("Play") { reviewing = ReviewSelection(clipID: clip.id, autoplay: true) }
-                        .disabled(!hasPreview)
-                    Divider()
-                    Button("Delete from Project", role: .destructive) { deleting = clip.id }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .accessibilityLabel("More actions for \(clip.title)")
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-            }
-            .controlSize(.small)
-        }
-        .padding(DS.Space.xs)
-        .background(isSelected ? DS.accent.opacity(0.08) : DS.surface,
-                    in: RoundedRectangle(cornerRadius: DS.Radius.large, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: DS.Radius.large, style: .continuous)
-                .strokeBorder(isSelected ? DS.accent : DS.hairline, lineWidth: isSelected ? 2 : 1)
-        }
+        ResultCard(clip: clip, directory: directory,
+            isSelected: Binding(
+                get: { selected.contains(clip.id) },
+                set: { if $0 { selected.insert(clip.id) } else { selected.remove(clip.id) } }),
+            selecting: !selected.isEmpty, exporting: exporting,
+            play: { reviewing = ReviewSelection(clipID: clip.id, autoplay: true) },
+            edit: { reviewing = ReviewSelection(clipID: clip.id, autoplay: false) },
+            download: { chooseExportFolder(for: [clip]) },
+            delete: { deleting = clip.id })
     }
 
     private func chooseExportFolder(for clips: [ProjectClipRecord]) {
@@ -290,6 +197,146 @@ struct ClipResultsView: View {
     }
 }
 
+/// One generated clip. The play glyph and selection checkbox appear on hover, or
+/// whenever a selection is in progress, so a grid of 20+ clips reads as pictures
+/// rather than as rows of controls. Every action is also in the context menu.
+private struct ResultCard: View {
+    let clip: ProjectClipRecord
+    let directory: URL
+    @Binding var isSelected: Bool
+    let selecting: Bool
+    let exporting: Bool
+    let play: () -> Void
+    let edit: () -> Void
+    let download: () -> Void
+    let delete: () -> Void
+
+    @State private var hovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var hasPreview: Bool {
+        FileManager.default.fileExists(atPath: directory.appending(path: clip.previewFileName).path)
+    }
+    private var hasFinal: Bool {
+        FileManager.default.fileExists(atPath: directory.appending(path: clip.finalFileName).path)
+    }
+    private var vertical: Bool { clip.spec.outputFormat.height > clip.spec.outputFormat.width }
+    private var showsControls: Bool { hovering || selecting || isSelected }
+
+    var body: some View {
+        let hasPreview = hasPreview
+        let hasFinal = hasFinal
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            Button(action: play) {
+                ResultThumbnail(url: directory.appending(path: clip.previewFileName),
+                                aspectRatio: vertical ? 9 / 16 : 16 / 9)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.medium, style: .continuous))
+                    .overlay(alignment: .bottomTrailing) {
+                        Text(ClipTimeLabel.duration(clip.spec))
+                            .font(.caption.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.black.opacity(0.65), in: Capsule())
+                            .padding(DS.Space.xs)
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if let viral = clip.viralPotential {
+                            ViralBadge(value: viral).padding(DS.Space.xs)
+                        }
+                    }
+                    .overlay {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 40))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, .black.opacity(0.45))
+                            .opacity(hasPreview && hovering ? 0.95 : 0)
+                    }
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.pressableCard)
+            .disabled(!hasPreview)
+            .help("Play \(clip.title)")
+            .accessibilityLabel("Play \(clip.title)")
+            .overlay(alignment: .topLeading) {
+                Toggle("Select \(clip.title)", isOn: $isSelected)
+                    .toggleStyle(.checkbox)
+                    .labelsHidden()
+                    .padding(6)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DS.Radius.small))
+                    .padding(DS.Space.xs)
+                    .disabled(exporting || !hasFinal)
+                    // Hidden visually until needed; still reachable by keyboard and VoiceOver.
+                    .opacity(showsControls ? 1 : 0)
+            }
+
+            // Two reserved lines keep cards in a row the same height.
+            Text(clip.title).font(.headline)
+                .lineLimit(2, reservesSpace: true)
+                .help(clip.title)
+            Text("Source \(ClipTimeLabel.source(clip.spec)) · \(ClipTimeLabel.aspect(clip.spec.outputFormat))")
+                .font(.callout).foregroundStyle(.secondary)
+                .monospacedDigit()
+                .lineLimit(1)
+            if !clip.proposal.rationale.isEmpty {
+                Text(clip.proposal.rationale)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(2, reservesSpace: true)
+                    .help(clip.proposal.rationale)
+            }
+            if !hasPreview || !hasFinal {
+                StatusMessage(text: "A generated file is missing. Reprocess the source or remove this clip from the project.",
+                              tone: .warning)
+            }
+            HStack(spacing: DS.Space.xs) {
+                Button("Edit", action: edit)
+                    .disabled(!hasPreview)
+                Button(action: download) {
+                    Label("Download", systemImage: "arrow.down.circle")
+                }
+                .disabled(exporting || !hasFinal)
+                .help("Save this clip, with its captions, to a folder")
+                Spacer(minLength: 0)
+                Menu {
+                    menuItems(hasPreview: hasPreview, hasFinal: hasFinal)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .accessibilityLabel("More actions for \(clip.title)")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
+            .controlSize(.small)
+        }
+        .padding(DS.Space.xs)
+        .background(isSelected ? DS.accent.opacity(0.08) : DS.surface,
+                    in: RoundedRectangle(cornerRadius: DS.Radius.large, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: DS.Radius.large, style: .continuous)
+                .strokeBorder(isSelected ? DS.accent : DS.hairline, lineWidth: isSelected ? 2 : 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: DS.Radius.large, style: .continuous))
+        .contextMenu { menuItems(hasPreview: hasPreview, hasFinal: hasFinal) }
+        .onHover { hovering = $0 }
+        .animation(reduceMotion ? nil : DS.Motion.quick, value: showsControls)
+        .animation(reduceMotion ? nil : DS.Motion.quick, value: hovering)
+    }
+
+    @ViewBuilder
+    private func menuItems(hasPreview: Bool, hasFinal: Bool) -> some View {
+        Button("Play", action: play).disabled(!hasPreview)
+        Button("Edit…", action: edit).disabled(!hasPreview)
+        Button("Download…", action: download).disabled(exporting || !hasFinal)
+        Button(isSelected ? "Deselect" : "Select") { isSelected.toggle() }
+            .disabled(exporting || !hasFinal)
+        Divider()
+        Button("Delete from Project…", role: .destructive, action: delete)
+    }
+}
+
 private struct ResultThumbnail: View {
     let url: URL
     let aspectRatio: CGFloat
@@ -312,17 +359,25 @@ private struct ResultThumbnail: View {
             .accessibilityLabel("Video preview")
         .task(id: url) {
             image = nil
-            guard FileManager.default.fileExists(atPath: url.path) else { return }
-            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url, options: [
-                AVURLAssetReferenceRestrictionsKey: AVAssetReferenceRestrictions.forbidAll.rawValue
-            ]))
-            generator.appliesPreferredTrackTransform = true
             // Large enough for a sharp card thumbnail in either orientation.
-            generator.maximumSize = CGSize(width: 540, height: 540)
-            if let (frame, _) = try? await generator.image(at: .zero) {
-                image = NSImage(cgImage: frame, size: .zero)
-            }
+            image = await ClipFrame.thumbnail(of: url, maxDimension: 540)
         }
+    }
+}
+
+/// Thumbnails for generated clips, taken a second in so fade-ins and cut-ins
+/// don't leave a black cover.
+enum ClipFrame {
+    static func thumbnail(of url: URL, maxDimension: CGFloat) async -> NSImage? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url, options: [
+            AVURLAssetReferenceRestrictionsKey: AVAssetReferenceRestrictions.forbidAll.rawValue
+        ]))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: maxDimension, height: maxDimension)
+        var frame = try? await generator.image(at: CMTime(seconds: 1, preferredTimescale: 600)).image
+        if frame == nil { frame = try? await generator.image(at: .zero).image }
+        return frame.map { NSImage(cgImage: $0, size: .zero) }
     }
 }
 
@@ -767,7 +822,7 @@ struct ViralBadge: View {
     private var tone: (label: String, color: Color) {
         switch value {
         case 0.7...: ("High", .green)
-        case 0.45..<0.7: ("Medium", .orange)
+        case 0.45..<0.7: ("Medium", .secondary)
         default: ("Low", .secondary)
         }
     }
@@ -782,7 +837,9 @@ struct ViralBadge: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
-        .background(tone.color == .secondary ? Color.black.opacity(0.6) : tone.color.opacity(0.9), in: Capsule())
+        // Only a high estimate earns color; the rest sit quietly on the frame, so a
+        // grid of mid-range clips is not a wall of orange warning pills.
+        .background(value >= 0.7 ? Color.green.opacity(0.9) : Color.black.opacity(0.6), in: Capsule())
         .help("Viral chance: an estimate from the clip's hook, interest, completeness, and story")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Viral chance \(Int((value * 100).rounded())) percent, \(tone.label)")

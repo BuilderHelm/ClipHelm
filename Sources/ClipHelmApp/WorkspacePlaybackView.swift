@@ -759,7 +759,7 @@ struct WorkspacePlaybackView: View {
                                     .padding(.horizontal, DS.Space.xs)
                                     .contentShape(Rectangle())
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.pressableRow)
                                 .disabled(source == nil)
                                 .help("Jump to \(Self.timeLabel(segment.range.start))")
                                 Divider()
@@ -864,7 +864,7 @@ struct WorkspacePlaybackView: View {
                             .padding(.vertical, DS.Space.xs)
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressableRow)
                         .help("Jump to this moment")
                     }
                 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum AppRoute: String, Hashable {
-    case home, recent, newProject, settings, workspace
+    case home, recent, newProject, workspace
 }
 
 enum WizardStep: Int, CaseIterable, Identifiable {
@@ -78,12 +78,14 @@ struct ClipHelmApp: App {
                     .keyboardShortcut("1", modifiers: .command)
                 Button("Recent Projects") { navigation.route = .recent }
                     .keyboardShortcut("2", modifiers: .command)
-                Button("Settings") { navigation.route = .settings }
-                    .keyboardShortcut(",", modifiers: .command)
                 Divider()
                 Button("Toggle Inspector") { navigation.inspectorVisible.toggle() }
                     .keyboardShortcut("i", modifiers: .command)
             }
+        }
+        // The standard Settings window: ClipHelm ▸ Settings… (⌘,).
+        Settings {
+            SettingsView()
         }
     }
 }

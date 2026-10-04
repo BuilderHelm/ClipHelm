@@ -39,7 +39,6 @@ struct AppShell: View {
                 case .newProject:
                     WizardView(draft: $draft, step: $navigation.step, pipeline: pipeline,
                                authorizedRemote: $authorizedRemote, onSave: saveDraft)
-                case .settings: settings
                 case .workspace:
                     if let selectedProject {
                         workspace(selectedProject)
@@ -102,22 +101,20 @@ struct AppShell: View {
         case .home: "Home"
         case .recent: "Recent Projects"
         case .newProject: "New Clip Project"
-        case .settings: "Settings"
         case .workspace: selectedProject?.title ?? "Project Workspace"
         }
     }
 
+    /// Returning creators see their work right under the link field; the
+    /// "how it works" primer is only for a first run with nothing to show yet.
     private var home: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DS.Space.xl) {
-                VStack(alignment: .leading, spacing: DS.Space.md) {
-                    HStack(spacing: DS.Space.sm) {
-                        AppLogo(size: 48)
-                        Eyebrow("ClipHelm")
-                    }
+                VStack(alignment: .leading, spacing: DS.Space.sm) {
+                    // The sidebar already carries the logo, so the hero is words only.
                     Text("A better cut starts\nwith the right moment.")
-                        .font(.system(size: 40, weight: .semibold, design: .rounded))
-                        .tracking(-1)
+                        .font(.system(size: 36, weight: .bold))
+                        .tracking(-0.7)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
                     Text("Paste a YouTube link and choose your clip options while it downloads. Then press Start and ClipHelm finds the best moments.")
@@ -129,36 +126,32 @@ struct AppShell: View {
 
                 VStack(alignment: .leading, spacing: DS.Space.sm) {
                     QuickClipView(onContinue: continueWithLink)
-                    HStack(spacing: DS.Space.sm) {
-                        Text("Have a local file, or want to choose format, framing, and captions?")
+                    HStack(spacing: DS.Space.xxs) {
+                        Text("Working from a local file?")
                             .foregroundStyle(.secondary)
-                        Button("New Clip Project…") {
+                        Button("Start a project from a file…") {
                             navigation.startProject()
                         }
+                        .buttonStyle(.link)
                         .help("Choose a local file or customize format, framing, length, and captions (⌘N)")
                     }
                     .font(.callout)
                 }
 
-                UniformGrid(minimumWidth: 200) {
-                    howItWorks
-                }
-
-                VStack(alignment: .leading, spacing: DS.Space.sm) {
-                    HStack {
-                        Text("Recent Projects").font(.title2.weight(.semibold))
-                            .accessibilityAddTraits(.isHeader)
-                        Spacer()
-                        if !store.projects.isEmpty {
-                            Button("View All") { navigation.route = .recent }
+                if store.projects.isEmpty {
+                    UniformGrid(minimumWidth: 200) {
+                        howItWorks
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: DS.Space.sm) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Recent Projects").font(.title2.weight(.semibold))
+                                .accessibilityAddTraits(.isHeader)
+                            Spacer()
+                            Button("View All \(store.projects.count)") { navigation.route = .recent }
                                 .buttonStyle(.link)
                         }
-                    }
-                    if store.projects.isEmpty {
-                        StatusMessage(text: "Your projects will appear here after you create one.", tone: .neutral)
-                            .padding(.vertical, DS.Space.xs)
-                    } else {
-                        projectList(Array(store.projects.prefix(3)))
+                        projectList(Array(store.projects.prefix(4)))
                     }
                 }
             }
@@ -243,63 +236,8 @@ struct AppShell: View {
     }
 
     private func projectRow(_ project: ProjectRecord) -> some View {
-        ProjectRow(project: project) { navigation.openProject(project.id.rawValue) }
-    }
-
-    private var settings: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DS.Space.lg) {
-                PageHeader(title: "Settings")
-                settingsGroup("General", systemImage: "gearshape") {
-                    LabeledContent("Appearance", value: "Follows macOS")
-                    Divider()
-                    LabeledContent("Project storage", value: "Application Support / ClipHelm / Projects")
-                    Text("Project drafts and source metadata are saved on this Mac. Source access must be granted again after relaunch.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                settingsGroup("OpenRouter", systemImage: "key") {
-                    OpenRouterSettingsView()
-                }
-                settingsGroup("YouTube Downloader", systemImage: "arrow.down.circle") {
-                    YouTubeToolSettingsView()
-                }
-                settingsGroup("About", systemImage: "info.circle") {
-                    HStack(spacing: DS.Space.md) {
-                        AppLogo(size: 56)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("ClipHelm").font(.title3.weight(.semibold))
-                            Text(Self.versionLabel).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                settingsGroup("Keyboard Shortcuts", systemImage: "keyboard") {
-                    shortcut("New project", "⌘N")
-                    shortcut("Home / Recent Projects", "⌘1 / ⌘2")
-                    shortcut("Settings", "⌘,")
-                    shortcut("Toggle inspector", "⌘I")
-                    shortcut("Previous / next setup step", "⌘[ / ⌘]")
-                }
-            }
-            .readableColumn(DS.Width.form, padding: DS.Space.xl)
-        }
-    }
-
-    private func settingsGroup<Content: View>(_ title: String, systemImage: String,
-                                              @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: DS.Space.sm) {
-            Label(title, systemImage: systemImage)
-                .font(.headline)
-                .accessibilityAddTraits(.isHeader)
-            VStack(alignment: .leading, spacing: DS.Space.sm) { content() }
-                .surfaceCard()
-        }
-    }
-
-    private func shortcut(_ title: String, _ keys: String) -> some View {
-        LabeledContent(title) {
-            Text(keys).font(.body.monospaced()).foregroundStyle(.secondary)
+        ProjectRow(project: project, exportsDirectory: try? store.exportsDirectory(for: project.id)) {
+            navigation.openProject(project.id.rawValue)
         }
     }
 
@@ -472,13 +410,6 @@ struct AppShell: View {
             fileURL: prepared.fileURL, asset: original, hasAudio: prepared.hasAudio), for: project.id)
     }
 
-    private static var versionLabel: String {
-        let info = Bundle.main.infoDictionary
-        guard let version = info?["CFBundleShortVersionString"] as? String else { return "Development build" }
-        let build = info?["CFBundleVersion"] as? String
-        return build.map { "Version \(version) (\($0))" } ?? "Version \(version)"
-    }
-
     private static func durationLabel(_ duration: MediaTime) -> String {
         let seconds = duration.microseconds / 1_000_000
         return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
@@ -487,19 +418,22 @@ struct AppShell: View {
 
 private struct ProjectRow: View {
     let project: ProjectRecord
+    let exportsDirectory: URL?
     let open: () -> Void
     @State private var hovering = false
+
+    /// A frame from the strongest clip, so a project is recognizable at a glance.
+    private var coverURL: URL? {
+        guard let exportsDirectory else { return nil }
+        let best = project.clips.max { ($0.viralPotential ?? 0) < ($1.viralPotential ?? 0) }
+        return best.map { exportsDirectory.appending(path: $0.previewFileName) }
+    }
 
     var body: some View {
         Button(action: open) {
             HStack(spacing: DS.Space.sm) {
-                Image(systemName: project.outputFormat.height > project.outputFormat.width
-                      ? "rectangle.portrait" : "rectangle")
-                    .font(.title3)
-                    .foregroundStyle(DS.accent)
-                    .frame(width: 40, height: 40)
-                    .background(DS.accent.opacity(0.1),
-                                in: RoundedRectangle(cornerRadius: DS.Radius.small, style: .continuous))
+                ProjectCover(url: coverURL, vertical: project.outputFormat.height > project.outputFormat.width)
+                    .frame(width: 56, height: 40)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(project.title).font(.headline).lineLimit(1)
@@ -510,9 +444,11 @@ private struct ProjectRow: View {
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: DS.Space.xs)
-                Text(project.createdAt, style: .date)
+                // Relative, matching the sidebar, so one project never shows two date styles.
+                Text(project.createdAt.formatted(.relative(presentation: .named)))
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .help(project.createdAt.formatted(date: .long, time: .shortened))
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
@@ -523,10 +459,37 @@ private struct ProjectRow: View {
             .background(hovering ? Color.primary.opacity(0.04) : .clear)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressableRow)
         .onHover { hovering = $0 }
         .help(project.title)
         .accessibilityLabel("Open \(project.title)")
+    }
+}
+
+/// A project's thumbnail: a frame from its best clip, or the canvas shape for drafts.
+private struct ProjectCover: View {
+    let url: URL?
+    let vertical: Bool
+    @State private var image: NSImage?
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: DS.Radius.small, style: .continuous)
+            .fill(image == nil ? AnyShapeStyle(DS.accent.opacity(0.1)) : AnyShapeStyle(DS.videoBackground))
+            .overlay {
+                if let image {
+                    Image(nsImage: image).resizable().scaledToFill()
+                } else {
+                    Image(systemName: vertical ? "rectangle.portrait" : "rectangle")
+                        .font(.title3)
+                        .foregroundStyle(DS.accent)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.small, style: .continuous))
+            .task(id: url) {
+                image = nil
+                guard let url else { return }
+                image = await ClipFrame.thumbnail(of: url, maxDimension: 160)
+            }
     }
 }
 

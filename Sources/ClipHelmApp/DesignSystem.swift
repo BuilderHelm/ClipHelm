@@ -30,6 +30,8 @@ enum DS {
     enum Motion {
         static let quick = Animation.snappy(duration: 0.18)
         static let standard = Animation.smooth(duration: 0.25)
+        /// Press feedback: lands on press-in, short and strongly eased out.
+        static let press = Animation.timingCurve(0.23, 1, 0.32, 1, duration: 0.12)
     }
 
     /// Brand accent, taken from the logo's blue. Light #1E66D8 and dark #2F6FE4
@@ -219,7 +221,7 @@ enum StatusTone {
     var color: Color {
         switch self {
         case .neutral: .secondary
-        case .info: .blue
+        case .info: DS.accent
         case .success: .green
         case .warning: .orange
         case .error: .red
@@ -227,12 +229,25 @@ enum StatusTone {
     }
 }
 
-/// Icon plus text so meaning never depends on color alone.
+/// Icon plus text so meaning never depends on color alone. Neutral messages are
+/// plain helper text: they carry no state, so they get no icon (a lone dashed
+/// circle reads as an unchecked option).
 struct StatusMessage: View {
     let text: String
     var tone: StatusTone = .info
 
     var body: some View {
+        if tone == .neutral {
+            Text(text)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            label
+        }
+    }
+
+    private var label: some View {
         Label {
             Text(text)
                 .foregroundStyle(tone == .error ? Color.primary : Color.secondary)
@@ -293,6 +308,49 @@ struct TaskProgressRow: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(label)
     }
+}
+
+// MARK: - Press feedback
+
+/// Feedback for custom buttons, shown the instant the pointer goes down.
+/// Cards and tiles compress slightly; rows highlight instead, because a whole
+/// row shrinking reads as the list moving. Reduce Motion swaps the scale for a dim.
+struct PressableButtonStyle: ButtonStyle {
+    enum Kind { case card, row }
+    var kind: Kind = .card
+
+    func makeBody(configuration: Configuration) -> some View {
+        PressableBody(configuration: configuration, kind: kind)
+    }
+
+    private struct PressableBody: View {
+        let configuration: Configuration
+        let kind: Kind
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+        var body: some View {
+            let pressed = configuration.isPressed
+            switch kind {
+            case .card:
+                configuration.label
+                    .scaleEffect(pressed && !reduceMotion ? 0.97 : 1)
+                    .opacity(pressed && reduceMotion ? 0.8 : 1)
+                    .animation(DS.Motion.press, value: pressed)
+            case .row:
+                configuration.label
+                    .background(pressed ? Color.primary.opacity(0.08) : .clear,
+                                in: RoundedRectangle(cornerRadius: DS.Radius.small, style: .continuous))
+                    .animation(DS.Motion.press, value: pressed)
+            }
+        }
+    }
+}
+
+extension ButtonStyle where Self == PressableButtonStyle {
+    /// A card or tile that compresses on press.
+    static var pressableCard: PressableButtonStyle { PressableButtonStyle(kind: .card) }
+    /// A list row that highlights on press.
+    static var pressableRow: PressableButtonStyle { PressableButtonStyle(kind: .row) }
 }
 
 // MARK: - Choice cards
@@ -357,7 +415,7 @@ struct OptionCard: View {
             }
             .contentShape(RoundedRectangle(cornerRadius: DS.Radius.medium, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressableCard)
         .onHover { hovering = $0 }
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }

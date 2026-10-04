@@ -134,10 +134,10 @@ private struct StartButton: View {
                 .foregroundStyle(.white)
             }
             .frame(width: 128, height: 128)
-            .scaleEffect(hovering && enabled && !reduceMotion ? 1.04 : 1)
             .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        // Lift with shadow on hover; compress on press so the click lands instantly.
+        .buttonStyle(.pressableCard)
         .disabled(!enabled)
         .onHover { hovering = $0 }
         .animation(reduceMotion ? nil : DS.Motion.quick, value: hovering)
