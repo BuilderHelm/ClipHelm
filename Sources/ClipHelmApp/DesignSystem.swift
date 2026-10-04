@@ -79,6 +79,31 @@ extension View {
         modifier(SurfaceCard(padding: padding, highlighted: highlighted))
     }
 
+    /// Pins a bar (a wizard or sheet footer) to the bottom edge on the same surface
+    /// as the content. macOS 26 and later fade scrolling content under it with the
+    /// system scroll edge effect instead of drawing a separate gray strip.
+    @ViewBuilder
+    func bottomBar<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        if #available(macOS 26, *) {
+            safeAreaBar(edge: .bottom, spacing: 0) { bar() }
+        } else {
+            safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 0) {
+                    Divider()
+                    bar()
+                }
+                .background(.bar)
+            }
+        }
+    }
+
+    /// The screen's one primary action. Filled accent when it can act; a neutral
+    /// bordered button while blocked, so an unready action never shows as a dim,
+    /// broken-looking blue. Pair a blocked action with the reason next to it.
+    func primaryAction(ready: Bool = true) -> some View {
+        modifier(PrimaryAction(ready: ready))
+    }
+
     /// Centers content in the detail column with a readable maximum width.
     func readableColumn(_ width: CGFloat = DS.Width.content,
                         padding: CGFloat = DS.Space.xl) -> some View {
@@ -307,6 +332,18 @@ struct TaskProgressRow: View {
         .font(.callout)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(label)
+    }
+}
+
+private struct PrimaryAction: ViewModifier {
+    let ready: Bool
+
+    func body(content: Content) -> some View {
+        if ready {
+            content.buttonStyle(.borderedProminent)
+        } else {
+            content.buttonStyle(.bordered).disabled(true)
+        }
     }
 }
 

@@ -1,10 +1,10 @@
 # Design System
 
-ClipHelm is a native macOS tool for creators. The interface uses system controls, SF Pro, SF Symbols, and a follows-macOS appearance. On top of that it adds one brand accent and a small set of shared components. Tokens and components live in `Sources/ClipHelmApp/DesignSystem.swift`. Views use them and don't hard-code spacing, radii, colors, or status text.
+ClipHelm is a native macOS tool for creators. The interface uses system controls, SF Pro, SF Symbols, and a follows-macOS appearance. `scripts/build-app.sh` stamps the binary with the real SDK version (SwiftPM otherwise stamps the macOS 14 deployment target), so on macOS 26 and later the app gets the current window design: glass toolbar, Finder-style sidebar, and scroll edge effects. On top of that it adds one brand accent and a small set of shared components. Tokens and components live in `Sources/ClipHelmApp/DesignSystem.swift`. Views use them and don't hard-code spacing, radii, colors, or status text.
 
 ## Principles
 
-1. **One primary action per screen.** Home: Choose Clip Options. Wizard: Continue / Create Project in the pinned footer. Workspace: the circular Start button, or Download once clips exist. Review sheet: Save Changes. The sidebar's New Clip Project is bordered, not filled, so it never competes.
+1. **One primary action per screen.** Home: Choose Clip Options. Wizard: Continue / Create Project in the pinned footer. Workspace: the circular Start button, or Download once clips exist. Review sheet: Save Changes. New Clip Project lives in the toolbar, so it never competes.
 2. **Status is never color alone.** Every state pairs an SF Symbol with text (`StatusMessage`, `StatusBadge`).
 3. **Show, don't name.** Visual choices (canvas, framing, pacing, caption style) are picked from cards with an icon, a description, or a rendered sample.
 4. **Explain disabled actions.** When a forward action is unavailable, the reason appears next to it (for example, "Choose a video to continue.").
@@ -12,6 +12,16 @@ ClipHelm is a native macOS tool for creators. The interface uses system controls
 6. **Feedback lands on press-in.** Every custom button uses `.pressableCard` or `.pressableRow`, so a click responds before mouse-up.
 7. **Controls appear when they're needed.** Dense grids (generated clips) show pictures first; play and selection controls appear on hover or once a selection exists, and every action is also in the context menu.
 8. **Color is spent on meaning.** One accent (`DS.accent`), also used for info. Semantic colors appear only when the state calls for it: a viral badge is green only for High, neutral otherwise.
+
+## Button hierarchy
+
+| Level | Style | Use |
+|---|---|---|
+| Primary | `primaryAction(ready:)` | One per screen: Continue / Create Project, Choose Clip Options, Choose Video… (until a video is chosen), Download, Save Changes. |
+| Secondary | `.bordered` (default) | Back, Edit, Replace…, Select All. |
+| Tertiary | `.link` | Inline jumps: View All, Edit in Review, Start a project from a file…. |
+
+Footers use `.controlSize(.large)`; buttons inside content use the regular size.
 
 ## Tokens
 
@@ -36,6 +46,8 @@ The accent is applied once at the window root with `.tint(DS.accent)` (and on th
 | `readableColumn(_:padding:)` | Centers detail content at a readable maximum width. |
 | `PageHeader` / `Eyebrow` | Title block for every route: optional eyebrow, large title, subtitle, trailing accessory. |
 | `StatusMessage` | Inline icon + text feedback. Tones: info, success, warning, error. `neutral` is plain secondary helper text with no icon. |
+| `primaryAction(ready:)` | The one primary button: filled accent when it can act, neutral bordered (and disabled) while blocked. Use instead of `.borderedProminent` + `.disabled`. |
+| `bottomBar { }` | Footer pinned to the bottom of a scroll view on the content's own surface (scroll edge effect on macOS 26+, a `.bar` strip before). |
 | `PressableButtonStyle` | `.pressableCard` (scale 0.97 on press) for cards, tiles, and thumbnails; `.pressableRow` (highlight on press) for list rows. Use instead of `.plain`. |
 | `StatusBadge` | Compact state capsule for a stage or project ("Running", "Done", "3 clips saved"). |
 | `TaskProgressRow` | The single progress pattern: bar or spinner, stage text, percent, Cancel. |
@@ -48,7 +60,8 @@ The accent is applied once at the window root with `.tint(DS.accent)` (and on th
 
 ## Screen structure
 
-- **Sidebar**: logo and wordmark, then **New Clip Project** as a full-width bordered button (an action, not a destination). Below that, a Library section (Home, and Recent Projects with a count badge) and a Projects section listing the eight most recent projects. Each project row shows its canvas shape (filled once it has clips, outlined while a draft), its status, and a relative date so same-named projects stay distinct. A Settings link that opens the Settings window is pinned to the bottom.
+- **Sidebar**: a Finder-style source list of places only: Library (Home, Recent Projects with a count badge) and Projects (the eight most recent). Each project is one line: its canvas shape as the icon (filled once it has clips, outlined while a draft), its title, and its clip count as the badge; status, date, and source are in the tooltip.
+- **Toolbar**: New Clip Project (⌘N) everywhere except inside setup, plus the inspector toggle in a workspace. Settings is in the app menu (⌘,).
 - **Home**: a words-only hero (the sidebar already carries the logo), the YouTube link card, a link for local files, then recent projects with a frame from each project's best clip. The three-step "how it works" row replaces Recent Projects only when there are no projects yet.
 - **New Clip Project**: header, clickable step rail (completed steps jump back), step content, and a pinned footer with Back, the blocking reason, and Continue. The Review step lists every choice with an Edit link to its step.
 - **Workspace**: the clip job card first. Before a run it holds the circular **Start** button, the live download line, and a summary of the chosen options; during a run it lists every phase with its state and percent; afterwards it summarizes the result. Generated clips follow, then the player (a taller stage for vertical sources), the source-access card when needed, and an optional "Explore the source" group: Local analysis, Transcript, Best moments.

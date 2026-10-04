@@ -51,7 +51,16 @@ struct AppShell: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle(title)
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                // Actions live in the toolbar, as in Finder; the sidebar holds only places.
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if navigation.route != .newProject {
+                        Button {
+                            navigation.startProject()
+                        } label: {
+                            Label("New Clip Project", systemImage: "plus")
+                        }
+                        .help("New Clip Project (⌘N)")
+                    }
                     if navigation.route == .workspace {
                         Button {
                             navigation.inspectorVisible.toggle()
@@ -59,13 +68,6 @@ struct AppShell: View {
                             Label("Inspector", systemImage: "sidebar.right")
                         }
                         .help("Show or hide the inspector (⌘I)")
-                    } else {
-                        Button {
-                            navigation.startProject()
-                        } label: {
-                            Label("New Clip Project", systemImage: "plus")
-                        }
-                        .help("New Clip Project (⌘N)")
                     }
                 }
             }

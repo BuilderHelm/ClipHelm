@@ -125,8 +125,7 @@ struct OpenRouterSettingsView: View {
                         showingKeySheet = false
                         Task { await model.save(key) }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(keyInput.isEmpty)
+                    .primaryAction(ready: !keyInput.isEmpty)
                     .keyboardShortcut(.defaultAction)
                 }
             }

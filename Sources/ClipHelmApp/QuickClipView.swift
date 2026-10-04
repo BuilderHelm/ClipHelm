@@ -111,9 +111,8 @@ struct QuickClipView: View {
                 Button(action: proceed) {
                     Label("Choose Clip Options", systemImage: "slider.horizontal.3")
                 }
-                .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(model.busy || !model.hasKey || !model.authorized || model.link.isEmpty)
+                .primaryAction(ready: !model.busy && model.hasKey && model.authorized && !model.link.isEmpty)
                 if model.stage == .savingKey { TaskProgressRow(label: "Checking key…", fraction: nil) }
             }
             if let message = model.message {

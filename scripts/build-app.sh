@@ -12,9 +12,15 @@ app_dir="$repo_dir/build/ClipHelm.app"
 
 cd "$repo_dir"
 mkdir -p "$repo_dir/.build/clang-cache" "$repo_dir/.build/cache"
+# SwiftPM stamps the binary with the deployment target as its SDK version
+# (sdk 14.0). AppKit reads that stamp to pick the window design, so without
+# this the app gets the pre-macOS 26 look: opaque title strip, old sidebar and
+# toolbar. Stamp the real SDK version; the minimum stays macOS 14.
+sdk_version="$(xcrun --show-sdk-version)"
 CLANG_MODULE_CACHE_PATH="$repo_dir/.build/clang-cache" \
 XDG_CACHE_HOME="$repo_dir/.build/cache" \
-swift build --disable-sandbox --scratch-path "$build_dir" -c "$configuration" --product ClipHelmApp
+swift build --disable-sandbox --scratch-path "$build_dir" -c "$configuration" --product ClipHelmApp \
+  -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$sdk_version"
 
 rm -rf "$app_dir"
 mkdir -p "$app_dir/Contents/MacOS"

@@ -78,8 +78,7 @@ struct ClipJobCard: View {
                 Button(action: onStart) {
                     Label("Try Again", systemImage: "arrow.clockwise")
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(startBlocker != nil)
+                .primaryAction(ready: startBlocker == nil)
             }
         }
     }

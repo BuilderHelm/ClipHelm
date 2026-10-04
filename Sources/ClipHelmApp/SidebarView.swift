@@ -6,10 +6,9 @@ enum SidebarSelection: Hashable {
     case project(UUID)
 }
 
-/// Brand header and New Clip Project on top, library and projects in the middle,
-/// Settings pinned to the bottom. Creating a project is an action, not a place,
-/// so it is a button rather than a row. It stays bordered rather than prominent so
-/// each screen's own primary action is the only filled button in the window.
+/// A Finder-style source list: Library destinations, then recent projects. Actions
+/// (New Clip Project) live in the window toolbar and Settings in the app menu (⌘,),
+/// so the sidebar holds only places to go.
 struct SidebarView: View {
     @ObservedObject var navigation: NavigationState
     let projects: [ProjectRecord]
@@ -65,58 +64,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .safeAreaInset(edge: .top, spacing: 0) { header }
-        .safeAreaInset(edge: .bottom, spacing: 0) { footer }
-        .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: DS.Space.sm) {
-            HStack(spacing: DS.Space.xs) {
-                AppLogo(size: 28)
-                Text("ClipHelm")
-                    .font(.title3.weight(.semibold))
-                    .accessibilityAddTraits(.isHeader)
-            }
-            Button {
-                navigation.startProject()
-            } label: {
-                Label("New Clip Project", systemImage: "plus")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .help("New Clip Project (⌘N)")
-        }
-        .padding(.horizontal, DS.Space.md)
-        .padding(.top, DS.Space.xs)
-        .padding(.bottom, DS.Space.sm)
-    }
-
-    private var footer: some View {
-        VStack(spacing: 0) {
-            Divider()
-            SettingsLink {
-                HStack(spacing: DS.Space.xs) {
-                    Image(systemName: "gearshape")
-                        .frame(width: 20)
-                    Text("Settings")
-                    Spacer()
-                    Text("⌘,")
-                        .font(.callout.monospaced())
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
-                }
-                .padding(.horizontal, DS.Space.xs)
-                .padding(.vertical, 6)
-                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.small, style: .continuous))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.pressableRow)
-            .help("Open Settings (⌘,)")
-            .padding(.horizontal, DS.Space.xs)
-            .padding(.vertical, DS.Space.xs)
-        }
+        .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 300)
     }
 
     private func projectRow(_ project: ProjectRecord) -> some View {
@@ -124,24 +72,15 @@ struct SidebarView: View {
         let status = project.clips.isEmpty
             ? "Draft"
             : "\(project.clips.count) \(project.clips.count == 1 ? "clip" : "clips")"
-        // The date tells same-named projects apart.
         let detail = "\(status) · \(project.createdAt.formatted(.relative(presentation: .named)))"
-        return Label {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(project.title).lineLimit(1)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        } icon: {
-            // Shape tells the canvas; a filled shape means clips exist, an outline a draft.
-            Image(systemName: (vertical ? "rectangle.portrait" : "rectangle")
-                  + (project.clips.isEmpty ? "" : ".fill"))
-                .foregroundStyle(project.clips.isEmpty ? Color.secondary : DS.accent)
-                .accessibilityHidden(true)
-        }
-        .help("\(project.title) — \(project.sourceLabel)")
-        .accessibilityLabel("\(project.title), \(detail)")
+        // One line per row, as in Finder. The canvas shape is the icon (filled once
+        // clips exist, outlined while a draft) and the clip count is the badge.
+        return Label(project.title,
+                     systemImage: (vertical ? "rectangle.portrait" : "rectangle")
+                        + (project.clips.isEmpty ? "" : ".fill"))
+            .lineLimit(1)
+            .badge(project.clips.count)
+            .help("\(project.title) — \(detail) · \(project.sourceLabel)")
+            .accessibilityLabel("\(project.title), \(detail)")
     }
 }

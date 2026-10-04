@@ -65,8 +65,7 @@ struct ClipResultsView: View {
                         Label(selected.isEmpty ? "Download All" : "Download \(selected.count) Selected",
                               systemImage: "arrow.down.circle")
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(exporting || exportsDirectory == nil || downloadableClips.isEmpty)
+                    .primaryAction(ready: !exporting && exportsDirectory != nil && !downloadableClips.isEmpty)
                 }
             }
             if project.clips.isEmpty {
@@ -668,8 +667,7 @@ struct ClipReviewView: View {
                 .disabled(busy || hasUnsavedChanges)
                 .help(hasUnsavedChanges ? "Save changes before exporting" : "Export this clip")
                 Button("Save Changes") { saveChanges() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(busy || !hasUnsavedChanges)
+                    .primaryAction(ready: !busy && hasUnsavedChanges)
                     .keyboardShortcut("s", modifiers: .command)
             }
             .controlSize(.large)

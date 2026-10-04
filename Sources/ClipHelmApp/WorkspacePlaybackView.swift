@@ -576,8 +576,7 @@ struct WorkspacePlaybackView: View {
                 Button(reattaching ? "Locating…" : "Locate Original Video…") {
                     showingSourcePicker = true
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(reattaching)
+                .primaryAction(ready: !reattaching)
             }
             if project.sourceKind == .directURL && !SourceImportPolicy.directURLImportEnabled {
                 Text(SourceIngestError.directURLDisabled.localizedDescription)
@@ -607,8 +606,7 @@ struct WorkspacePlaybackView: View {
                         reattaching = false
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(reattaching || !authorizedRemote || remoteLink.isEmpty)
+                .primaryAction(ready: !reattaching && authorizedRemote && !remoteLink.isEmpty)
                 if reattaching {
                     TaskProgressRow(label: reattachProgress?.stage == .downloading ? "Downloading…" : "Checking source…",
                                     fraction: reattachProgress?.fraction) {

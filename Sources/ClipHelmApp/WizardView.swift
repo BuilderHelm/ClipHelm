@@ -46,11 +46,11 @@ struct WizardView: View {
                 .readableColumn(DS.Width.form, padding: DS.Space.xl)
                 .animation(reduceMotion ? nil : DS.Motion.standard, value: step)
             }
-            Divider()
-            footer
-                .padding(.horizontal, DS.Space.xl)
-                .padding(.vertical, DS.Space.sm)
-                .background(.bar)
+            .bottomBar {
+                footer
+                    .padding(.horizontal, DS.Space.xl)
+                    .padding(.vertical, DS.Space.sm)
+            }
         }
         .fileImporter(
             isPresented: $showsImporter,
@@ -111,14 +111,12 @@ struct WizardView: View {
             }
             if step == .process {
                 Button("Create Project") { onSave() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(blocker != nil)
+                    .primaryAction(ready: blocker == nil)
             } else {
                 Button("Continue") {
                     if let next = WizardStep(rawValue: step.rawValue + 1) { step = next }
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(blocker != nil)
+                .primaryAction(ready: blocker == nil)
                 .keyboardShortcut("]", modifiers: .command)
                 .help(nextStepHint)
             }
@@ -294,9 +292,10 @@ struct WizardView: View {
             Text("MP4, MKV, or MOV. The original file is never changed.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            // While nothing is chosen, this is the screen's one primary action.
             Button("Choose Video…") { showsImporter = true }
                 .controlSize(.large)
-                .disabled(preparing)
+                .primaryAction(ready: !preparing)
                 .padding(.top, DS.Space.xxs)
         }
         .padding(DS.Space.lg)
