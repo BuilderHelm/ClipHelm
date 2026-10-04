@@ -65,9 +65,20 @@ struct ClipRevisionPlanner: Sendable {
             asset: source.asset, cacheDirectory: cacheDirectory)
         let intent = AIEditIntent(proposalID: clip.proposal.id,
                                   suggestedRange: options.trimRange)
+        var evidence: FocusEvidence?
+        if options.framing == .smartAuto {
+            do {
+                evidence = try await FocusSampler().sample(sourceURL: source.fileURL, asset: source.asset,
+                                                           ranges: [options.trimRange])
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                evidence = nil  // Falls back to analysis-based framing.
+            }
+        }
         let planned = try ClipPlanner().plan(clipID: clip.id, proposal: clip.proposal,
             configuration: revisedConfiguration, asset: source.asset, analysis: analysis,
-            intent: intent, transcript: transcript)
+            intent: intent, transcript: transcript, focusEvidence: evidence)
         guard options.framing == .fullFrame else { return planned }
 
         let finalPaths = try manualPaths(segments: planned.segments, asset: source.asset,

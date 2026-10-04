@@ -14,7 +14,8 @@ public struct ClipPlanner: Sendable {
                      asset: MediaAsset, analysis: AnalysisResult, intent: AIEditIntent? = nil,
                      transcript: Transcript? = nil,
                      visionHints: [ContentClassification] = [],
-                     screenHints: [ScreenContentHint] = []) throws -> ClipHelmEditSpec {
+                     screenHints: [ScreenContentHint] = [],
+                     focusEvidence: FocusEvidence? = nil) throws -> ClipHelmEditSpec {
         try proposal.validate(for: asset)
         try analysis.validate(for: asset)
         try intent?.validate(for: proposal)
@@ -56,9 +57,13 @@ public struct ClipPlanner: Sendable {
         let crops: [CropPath]
         switch configuration.framingMode {
         case .smartAuto:
-            crops = try layoutCues.filter { $0.layout == .speakerFocus }.flatMap { try SmartAutoFrameEngine().frame(
+            // With dense evidence every full-frame shot is framed, including faceless
+            // ones (products, hands), which would otherwise be center-cropped.
+            let framed: Set<ShotLayout> = focusEvidence == nil
+                ? [.speakerFocus] : [.speakerFocus, .original, .screenAndSpeaker, .pictureInPicture]
+            crops = try layoutCues.filter { framed.contains($0.layout) }.flatMap { try SmartAutoFrameEngine().frame(
                 range: $0.sourceRange, asset: asset, format: configuration.outputFormat,
-                analysis: analysis, visionHints: visionHints).paths }
+                analysis: analysis, visionHints: visionHints, evidence: focusEvidence).paths }
         case .fullFrame:
             let sourceAspect = Double(asset.width) / Double(asset.height)
             let targetAspect = Double(configuration.outputFormat.width) / Double(configuration.outputFormat.height)

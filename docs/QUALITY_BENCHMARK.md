@@ -43,6 +43,26 @@ Run `CLIPHELM_RUN_RENDER_BENCHMARKS=1 swift test --disable-sandbox --filter Rend
 | 1080 × 1920 | 1 s | 0.276 | 0.123 | 85.7 |
 | 3840 × 2160 | 1 s | 0.564 | 0.078 | 85.7 |
 
+## Smart Auto Frame on real footage
+
+`FramingBenchmarkTests` replays a saved project's clips twice, with the crops they render today and re-planned by `ShotFramer`, and scores both against faces detected independently on full-resolution frames every 0.25 s. It also writes a before | after image of each second, faceless shots included. Run it with a project folder and its source video:
+
+```sh
+CLIPHELM_FRAMING_PROJECT=~/Library/Application\ Support/ClipHelm/Projects/<id>.cliphelm \
+CLIPHELM_FRAMING_SOURCE=/path/to/source.mp4 \
+CLIPHELM_FRAMING_OUT=/tmp/framing-out \
+swift test --disable-sandbox --filter FramingBenchmarkTests
+```
+
+Measured on 2026-10-04 on a 17-minute single-presenter product review (three 20-second 9:16 clips from 1920 × 960):
+
+| | Main face fully in frame | Crop away from every face |
+| --- | ---: | ---: |
+| Before (analysis-based) | 92.2% | 3.9% |
+| After (`ShotFramer`) | 97.4% | 1.3% |
+
+In the worst clip, the old crop sat on a title graphic for a second after a dissolve (20% of face frames); the new crop stays on the speaker. The remaining miss is one blurred transition frame. Faceless top-down product shots, previously center-cropped onto an empty table, now frame the products. A single source is a small sample: multi-camera podcasts and two-person wide shots still need the same comparison once their sources are available.
+
 ## Recovery checks
 
 Direct download cancellation, detached local-analysis cancellation, backend transcription cancellation, canceled OpenRouter response, canceled preview/final batch render, and missing final file before manifest save have regression tests. Retrying the canceled render succeeds; already accepted output remains. AVFoundation's canceled proxy sidecar and the renderer's export-start cancellation crash have dedicated regressions. The project manifest is written only after all generated files exist. Long real-media interruptions, disk-full behavior, and forced process termination remain manual release checks.

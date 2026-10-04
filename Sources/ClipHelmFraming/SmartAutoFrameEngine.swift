@@ -11,9 +11,20 @@ public struct FramingResult: Sendable {
 public struct SmartAutoFrameEngine: Sendable {
     public init() { }
 
+    /// With dense `evidence` covering the range, plans shot by shot (`ShotFramer`).
+    /// Without it, falls back to the whole-source analysis, as V1 did.
     public func frame(range: MediaTimeRange, asset: MediaAsset, format: OutputFormat,
                       analysis: AnalysisResult,
-                      visionHints: [ContentClassification] = []) throws -> FramingResult {
+                      visionHints: [ContentClassification] = [],
+                      evidence: FocusEvidence? = nil) throws -> FramingResult {
+        if let evidence, evidence.covers(range) {
+            // A validated screen label means the shot's content is the screen, not a face in it.
+            let screens = visionHints.filter {
+                [.screenShare, .presentation, .demo, .gameplay].contains($0.kind) && $0.confidence >= 0.75
+            }.map(\.range)
+            return try ShotFramer().frame(range: range, asset: asset, format: format,
+                                          evidence: evidence, screenRanges: screens)
+        }
         try analysis.validate(for: asset)
         guard range.end <= asset.duration,
               visionHints.allSatisfy({ $0.range.end <= asset.duration &&

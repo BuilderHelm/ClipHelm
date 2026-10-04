@@ -172,7 +172,25 @@ public struct ProcessingCoordinator: Sendable {
         progress(.init(stage: .checkingShots, fraction: 0))
         let localScreens = try await ScreenContentDetector().detect(sourceURL: source.fileURL,
             asset: source.asset, analysis: analysis, range: full) { fraction in
-            progress(.init(stage: .checkingShots, fraction: fraction * 0.5))
+            progress(.init(stage: .checkingShots, fraction: fraction * 0.3))
+        }
+        // Dense, clip-local framing evidence: frame-accurate cuts, faces, and salient
+        // regions for just the moments being cut, a few times a second.
+        let sourceAspect = Double(source.asset.width) / Double(source.asset.height)
+        let targetAspect = Double(configuration.outputFormat.width) / Double(configuration.outputFormat.height)
+        var focusEvidence: FocusEvidence?
+        if configuration.framingMode == .smartAuto, abs(sourceAspect / targetAspect - 1) >= 0.002 {
+            do {
+                focusEvidence = try await FocusSampler().sample(sourceURL: source.fileURL, asset: source.asset,
+                    ranges: discovery.moments.map(\.proposal.range)) { fraction in
+                    progress(.init(stage: .checkingShots, fraction: 0.3 + fraction * 0.5))
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // Media the reader can't decode falls back to analysis-based framing.
+                focusEvidence = nil
+            }
         }
         var screenHints = localScreens
         if configuration.smartEdit.useVisionForTrickyShots {
@@ -192,7 +210,7 @@ public struct ProcessingCoordinator: Sendable {
                     analysis: analysis, registry: registry, gateway: gateway)
             }
             progress(.init(stage: .checkingShots,
-                fraction: 0.5 + Double(index + 1) / Double(discovery.moments.count) * 0.5))
+                fraction: 0.8 + Double(index + 1) / Double(discovery.moments.count) * 0.2))
             frameHints.append(hints)
         }
         var plans: [(ClipProposal, ClipHelmEditSpec)] = []
@@ -201,7 +219,8 @@ public struct ProcessingCoordinator: Sendable {
             progress(.init(stage: .buildingClips, fraction: Double(index) / Double(discovery.moments.count)))
             let spec = try ClipPlanner().plan(clipID: ClipID(), proposal: moment.proposal,
                 configuration: configuration, asset: source.asset, analysis: analysis,
-                transcript: transcript, visionHints: frameHints[index], screenHints: screenHints)
+                transcript: transcript, visionHints: frameHints[index], screenHints: screenHints,
+                focusEvidence: focusEvidence)
             try EditSpecValidator().validate(spec, for: source.asset, proposal: moment.proposal)
             plans.append((moment.proposal, spec))
         }
